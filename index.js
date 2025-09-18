@@ -1,11 +1,22 @@
-const version = "0.0.3"
+const version = "0.0.4"
 
 let allowedDomains = process?.env?.ALLOWED_REMOTE_DOMAINS?.split(",") || ["*"];
 let imgproxyUrl = process?.env?.IMGPROXY_URL || "http://imgproxy:8080";
+const allowedFormats = new Set(["jpeg", "png", "webp", "avif", "gif"]);
 if (process.env.NODE_ENV === "development") {
     imgproxyUrl = "http://localhost:8888"
 }
 allowedDomains = allowedDomains.map(d => d.trim());
+
+function sanitizeFormat(formatParam) {
+    if (!formatParam) return "";
+    const normalized = formatParam.toLowerCase().trim();
+    if (!normalized) return "";
+    const canonical = normalized === "jpg" ? "jpeg" : normalized;
+    if (!/^[a-z0-9]+$/.test(canonical)) return "";
+    if (!allowedFormats.has(canonical)) return "";
+    return canonical;
+}
 
 Bun.serve({
     port: 3000,
@@ -43,11 +54,13 @@ async function resize(url) {
     const width = url.searchParams.get("width") || 0;
     const height = url.searchParams.get("height") || 0;
     const quality = url.searchParams.get("quality") || 75;
+    const format = sanitizeFormat(url.searchParams.get("format"));
     try {
-        const url = `${imgproxyUrl}/${preset}/resize:fill:${width}:${height}/q:${quality}/plain/${src}`
+        const formatPath = format ? `/format:${format}` : "";
+        const url = `${imgproxyUrl}/${preset}/resize:fill:${width}:${height}/q:${quality}${formatPath}/plain/${src}`
         const image = await fetch(url, {
             headers: {
-                "Accept": "image/avif,image/webp,image/apng,*/*",
+                "Accept": format ? `image/${format},*/*` : "image/avif,image/webp,image/apng,*/*",
             }
         })
         const headers = new Headers(image.headers);
